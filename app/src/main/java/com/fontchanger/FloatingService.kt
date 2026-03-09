@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.IBinder
@@ -15,6 +14,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -33,7 +33,9 @@ class FloatingService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var floatingView: View
+    private lateinit var layoutParams: WindowManager.LayoutParams
     private var styleIndex = 0
+    private var isInputActive = false
 
     private val currentStyle: FontStyle
         get() = FontStyle.entries[styleIndex]
@@ -76,15 +78,34 @@ class FloatingService : Service() {
         ).toInt()
     }
 
+    /** フォーカスを有効にする (入力モード) */
+    private fun enableFocus() {
+        if (isInputActive) return
+        isInputActive = true
+        layoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        try { windowManager.updateViewLayout(floatingView, layoutParams) } catch (_: Exception) {}
+    }
+
+    /** フォーカスを無効にする (他アプリに制御を返す) */
+    private fun disableFocus() {
+        if (!isInputActive) return
+        isInputActive = false
+        layoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        try { windowManager.updateViewLayout(floatingView, layoutParams) } catch (_: Exception) {}
+        // キーボードを閉じる
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(floatingView.windowToken, 0)
+    }
+
     private fun createFloatingWindow() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
-        val params = WindowManager.LayoutParams(
+        layoutParams = WindowManager.LayoutParams(
             dp(300),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, // 初期状態: フォーカスなし
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -127,18 +148,32 @@ class FloatingService : Service() {
 
         // テキスト入力
         val input = EditText(this).apply {
-            hint = "テキストを入力..."
+            hint = "タップして入力..."
             setHintTextColor(0xFF606080.toInt())
             setTextColor(0xFFE4E4EC.toInt())
             textSize = 14f
             setBackgroundColor(0xFF252535.toInt())
             setPadding(dp(12), dp(8), dp(12), dp(8))
             isSingleLine = true
+            isFocusable = true
+            isFocusableInTouchMode = true
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = dp(8) }
         }
+
+        // 入力欄タップ → フォーカスを有効化
+        input.setOnTouchListener { v, event ->
+            if (event.action == MotionEvent.ACTION_UP) {
+                enableFocus()
+                v.requestFocus()
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(v, InputMethodManager.SHOW_IMPLICIT)
+            }
+            false
+        }
+
         root.addView(input)
 
         // フォント名表示
@@ -166,7 +201,7 @@ class FloatingService : Service() {
         }
         root.addView(resultText)
 
-        // ボタン行: [← 前へ] [コピー] [次へ →]
+        // ボタン行: [← 前へ] [コピー] [次へ →] [✓ 完了]
         val buttonRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -182,12 +217,12 @@ class FloatingService : Service() {
                 setTextColor(0xFFE4E4EC.toInt())
                 textSize = 13f
                 setBackgroundColor(0xFF353545.toInt())
-                setPadding(dp(16), dp(8), dp(16), dp(8))
+                setPadding(dp(12), dp(8), dp(12), dp(8))
                 gravity = Gravity.CENTER
                 setOnClickListener { onClick() }
                 layoutParams = LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-                ).apply { marginStart = dp(4); marginEnd = dp(4) }
+                ).apply { marginStart = dp(2); marginEnd = dp(2) }
             }
         }
 
@@ -197,7 +232,7 @@ class FloatingService : Service() {
             styleLabel.text = currentStyle.displayName
         }
 
-        val prevBtn = createButton("◀ 前へ") {
+        val prevBtn = createButton("◀") {
             styleIndex = if (styleIndex > 0) styleIndex - 1 else FontStyle.entries.size - 1
             updateResult()
         }
@@ -206,15 +241,22 @@ class FloatingService : Service() {
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("FontChanger", text))
             Toast.makeText(this, "コピーしました", Toast.LENGTH_SHORT).show()
+            // コピー後、フォーカスを解放して他アプリに戻れるようにする
+            disableFocus()
         }
-        val nextBtn = createButton("次へ ▶") {
+        val nextBtn = createButton("▶") {
             styleIndex = if (styleIndex < FontStyle.entries.size - 1) styleIndex + 1 else 0
             updateResult()
+        }
+        val doneBtn = createButton("完了") {
+            input.clearFocus()
+            disableFocus()
         }
 
         buttonRow.addView(prevBtn)
         buttonRow.addView(copyBtn)
         buttonRow.addView(nextBtn)
+        buttonRow.addView(doneBtn)
         root.addView(buttonRow)
 
         // テキスト変更リスナー
@@ -233,16 +275,16 @@ class FloatingService : Service() {
         headerRow.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    initialX = params.x
-                    initialY = params.y
+                    initialX = layoutParams.x
+                    initialY = layoutParams.y
                     initialTouchX = event.rawX
                     initialTouchY = event.rawY
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    params.x = initialX + (event.rawX - initialTouchX).toInt()
-                    params.y = initialY + (event.rawY - initialTouchY).toInt()
-                    windowManager.updateViewLayout(root, params)
+                    layoutParams.x = initialX + (event.rawX - initialTouchX).toInt()
+                    layoutParams.y = initialY + (event.rawY - initialTouchY).toInt()
+                    windowManager.updateViewLayout(root, layoutParams)
                     true
                 }
                 else -> false
@@ -253,7 +295,7 @@ class FloatingService : Service() {
         updateResult()
 
         floatingView = root
-        windowManager.addView(root, params)
+        windowManager.addView(root, layoutParams)
     }
 
     override fun onDestroy() {
