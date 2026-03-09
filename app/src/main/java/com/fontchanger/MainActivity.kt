@@ -11,8 +11,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.drawable.Icon
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.util.Rational
 import android.widget.Toast
@@ -83,23 +85,18 @@ class MainActivity : ComponentActivity() {
             createAction(android.R.drawable.ic_menu_save, "コピー", ACTION_COPY, 1),
             createAction(android.R.drawable.ic_media_next, "次へ", ACTION_NEXT, 2),
         )
-
         val builder = PictureInPictureParams.Builder()
             .setAspectRatio(Rational(16, 9))
             .setActions(actions)
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setAutoEnterEnabled(true)
             builder.setSeamlessResizeEnabled(true)
         }
-
         return builder.build()
     }
 
     private fun updatePipParams() {
-        try {
-            setPictureInPictureParams(buildPipParams())
-        } catch (e: Exception) {
+        try { setPictureInPictureParams(buildPipParams()) } catch (e: Exception) {
             Log.e(TAG, "Failed to update PiP params", e)
         }
     }
@@ -130,7 +127,8 @@ class MainActivity : ComponentActivity() {
                     )
                 } else {
                     MainScreen(
-                        onEnterPip = { enterPipMode() }
+                        onEnterPip = { enterPipMode() },
+                        onStartFloating = { startFloatingWindow() }
                     )
                 }
             }
@@ -148,6 +146,23 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to enter PiP", e)
         }
+    }
+
+    private fun startFloatingWindow() {
+        if (!Settings.canDrawOverlays(this)) {
+            // 他のアプリの上に表示する権限をリクエスト
+            Toast.makeText(this, "「他のアプリの上に表示」を許可してください", Toast.LENGTH_LONG).show()
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
+            return
+        }
+        val intent = Intent(this, FloatingService::class.java)
+        startForegroundService(intent)
+        // アプリをバックグラウンドに移動
+        moveTaskToBack(true)
     }
 
     override fun onUserLeaveHint() {
