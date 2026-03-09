@@ -250,6 +250,14 @@ fun SettingsScreen(
                     .clickable { uriHandler.openUri("https://github.com/packed7Ice/fontchanger") }
                     .padding(vertical = 8.dp)
             )
+            Text(
+                text = "X (Twitter)",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable { uriHandler.openUri("https://x.com/YorikawaAise") }
+                    .padding(vertical = 8.dp)
+            )
 
             Spacer(modifier = Modifier.height(32.dp))
         }

@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.os.IBinder
 import android.util.TypedValue
@@ -115,6 +116,24 @@ class FloatingService : Service() {
         val windowWidth = AppSettings.getFloatingWidth(this)
         val opacity = AppSettings.getFloatingOpacity(this)
 
+        // テーマに応じた色を決定
+        val themeMode = AppSettings.getThemeMode(this)
+        val isDark = when (themeMode) {
+            AppSettings.THEME_LIGHT -> false
+            AppSettings.THEME_DARK -> true
+            else -> {
+                val nightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                nightMode == Configuration.UI_MODE_NIGHT_YES
+            }
+        }
+        val bgColor = if (isDark) 0xF01E1E2E.toInt() else 0xF0F5F5FA.toInt()
+        val inputBgColor = if (isDark) 0xFF252535.toInt() else 0xFFE8E8F0.toInt()
+        val textColor = if (isDark) 0xFFE4E4EC.toInt() else 0xFF1A1A2E.toInt()
+        val hintColor = if (isDark) 0xFF606080.toInt() else 0xFF909098.toInt()
+        val subTextColor = if (isDark) 0xFFA0A0B0.toInt() else 0xFF606078.toInt()
+        val btnBgColor = if (isDark) 0xFF353545.toInt() else 0xFFDDDDE8.toInt()
+        val accentColor = 0xFF6C63FF.toInt()
+
         layoutParams = WindowManager.LayoutParams(
             dp(windowWidth),
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -130,7 +149,7 @@ class FloatingService : Service() {
         // ルートレイアウト
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xF01E1E2E.toInt())
+            setBackgroundColor(bgColor)
             setPadding(dp(12), dp(8), dp(12), dp(12))
             elevation = dp(8).toFloat()
             alpha = opacity
@@ -151,7 +170,7 @@ class FloatingService : Service() {
 
         val dragHandle = TextView(this).apply {
             text = "⠿ FontChanger"
-            setTextColor(0xFFA0A0B0.toInt())
+            setTextColor(subTextColor)
             textSize = 12f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
@@ -159,7 +178,7 @@ class FloatingService : Service() {
         val closeBtn = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
             setBackgroundColor(0x00000000)
-            setColorFilter(0xFFA0A0B0.toInt())
+            setColorFilter(subTextColor)
             setOnClickListener { stopSelf() }
             layoutParams = LinearLayout.LayoutParams(dp(32), dp(32))
         }
@@ -171,10 +190,10 @@ class FloatingService : Service() {
         // テキスト入力
         val input = EditText(this).apply {
             hint = "タップして入力..."
-            setHintTextColor(0xFF606080.toInt())
-            setTextColor(0xFFE4E4EC.toInt())
+            setHintTextColor(hintColor)
+            setTextColor(textColor)
             textSize = 14f
-            setBackgroundColor(0xFF252535.toInt())
+            setBackgroundColor(inputBgColor)
             setPadding(dp(12), dp(8), dp(12), dp(8))
             isSingleLine = true
             isFocusable = true
@@ -201,7 +220,7 @@ class FloatingService : Service() {
         // フォント名表示
         val styleLabel = TextView(this).apply {
             text = currentStyle.displayName
-            setTextColor(0xFF6C63FF.toInt())
+            setTextColor(accentColor)
             textSize = 11f
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -213,7 +232,7 @@ class FloatingService : Service() {
         // 変換結果表示
         val resultText = TextView(this).apply {
             text = ""
-            setTextColor(0xFFE4E4EC.toInt())
+            setTextColor(textColor)
             textSize = 16f
             maxLines = 3
             layoutParams = LinearLayout.LayoutParams(
@@ -236,9 +255,9 @@ class FloatingService : Service() {
         fun createButton(text: String, onClick: () -> Unit): TextView {
             return TextView(this).apply {
                 this.text = text
-                setTextColor(0xFFE4E4EC.toInt())
+                setTextColor(textColor)
                 textSize = 13f
-                setBackgroundColor(0xFF353545.toInt())
+                setBackgroundColor(btnBgColor)
                 setPadding(dp(12), dp(8), dp(12), dp(8))
                 gravity = Gravity.CENTER
                 setOnClickListener { onClick() }
