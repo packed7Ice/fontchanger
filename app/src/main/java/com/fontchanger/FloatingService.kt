@@ -201,7 +201,7 @@ class FloatingService : Service() {
             styleIndex = if (styleIndex > 0) styleIndex - 1 else FontStyle.entries.size - 1
             updateResult()
         }
-        val copyBtn = createButton("📋 コピー") {
+        val copyBtn = createButton("コピー") {
             val text = resultText.text.toString()
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("FontChanger", text))
