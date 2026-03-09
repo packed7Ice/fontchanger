@@ -87,6 +87,13 @@ class FloatingService : Service() {
         try { windowManager.updateViewLayout(floatingView, layoutParams) } catch (_: Exception) {}
     }
 
+    /** ウィンドウ外タッチを処理 */
+    private fun handleOutsideTouch() {
+        if (isInputActive) {
+            disableFocus()
+        }
+    }
+
     /** フォーカスを無効にする (他アプリに制御を返す) */
     private fun disableFocus() {
         if (!isInputActive) return
@@ -119,6 +126,13 @@ class FloatingService : Service() {
             setBackgroundColor(0xF01E1E2E.toInt())
             setPadding(dp(12), dp(8), dp(12), dp(12))
             elevation = dp(8).toFloat()
+            // ウィンドウ外タッチで自動的にフォーカス解放
+            setOnTouchListener { _, event ->
+                if (event.action == MotionEvent.ACTION_OUTSIDE) {
+                    handleOutsideTouch()
+                }
+                false
+            }
         }
 
         // ドラッグハンドル + 閉じるボタン
