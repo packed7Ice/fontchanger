@@ -19,6 +19,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fontchanger.ui.components.PipContent
@@ -30,39 +31,62 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val TAG = "FontChanger"
         private const val ACTION_COPY = "com.fontchanger.ACTION_COPY"
-        private const val REQUEST_COPY = 1
+        private const val ACTION_PREV = "com.fontchanger.ACTION_PREV"
+        private const val ACTION_NEXT = "com.fontchanger.ACTION_NEXT"
     }
 
     private var isInPipMode by mutableStateOf(false)
     private var lastInputText by mutableStateOf("Hello World")
-    private var lastStyle by mutableStateOf(FontStyle.BOLD_SCRIPT)
+    private var styleIndex by mutableIntStateOf(0)
 
-    private val copyReceiver = object : BroadcastReceiver() {
+    private val currentStyle: FontStyle
+        get() = FontStyle.entries[styleIndex]
+
+    private val pipReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == ACTION_COPY) {
-                val text = FontConverter.convert(lastInputText, lastStyle)
-                val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("FontChanger", text))
-                Toast.makeText(context, "コピーしました", Toast.LENGTH_SHORT).show()
+            when (intent.action) {
+                ACTION_COPY -> {
+                    val text = FontConverter.convert(lastInputText, currentStyle)
+                    val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("FontChanger", text))
+                    Toast.makeText(context, "コピーしました", Toast.LENGTH_SHORT).show()
+                }
+                ACTION_PREV -> {
+                    styleIndex = if (styleIndex > 0) styleIndex - 1
+                        else FontStyle.entries.size - 1
+                    updatePipParams()
+                }
+                ACTION_NEXT -> {
+                    styleIndex = if (styleIndex < FontStyle.entries.size - 1) styleIndex + 1
+                        else 0
+                    updatePipParams()
+                }
             }
         }
     }
 
-    private fun buildPipParams(): PictureInPictureParams {
-        val copyIntent = Intent(ACTION_COPY)
-        val copyPendingIntent = PendingIntent.getBroadcast(
-            this, REQUEST_COPY, copyIntent,
+    private fun createAction(iconRes: Int, title: String, action: String, requestCode: Int): RemoteAction {
+        val intent = Intent(action).apply { setPackage(packageName) }
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, requestCode, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val copyAction = RemoteAction(
-            Icon.createWithResource(this, android.R.drawable.ic_menu_save),
-            "コピー", "変換テキストをコピー",
-            copyPendingIntent
+        return RemoteAction(
+            Icon.createWithResource(this, iconRes),
+            title, title, pendingIntent
+        )
+    }
+
+    private fun buildPipParams(): PictureInPictureParams {
+        val actions = listOf(
+            createAction(android.R.drawable.ic_media_previous, "前へ", ACTION_PREV, 0),
+            createAction(android.R.drawable.ic_menu_save, "コピー", ACTION_COPY, 1),
+            createAction(android.R.drawable.ic_media_next, "次へ", ACTION_NEXT, 2),
         )
 
         val builder = PictureInPictureParams.Builder()
             .setAspectRatio(Rational(16, 9))
-            .setActions(listOf(copyAction))
+            .setActions(actions)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setAutoEnterEnabled(true)
@@ -72,28 +96,37 @@ class MainActivity : ComponentActivity() {
         return builder.build()
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(copyReceiver, IntentFilter(ACTION_COPY), RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            registerReceiver(copyReceiver, IntentFilter(ACTION_COPY))
-        }
-
+    private fun updatePipParams() {
         try {
             setPictureInPictureParams(buildPipParams())
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to set PiP params", e)
+            Log.e(TAG, "Failed to update PiP params", e)
         }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val filter = IntentFilter().apply {
+            addAction(ACTION_COPY)
+            addAction(ACTION_PREV)
+            addAction(ACTION_NEXT)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(pipReceiver, filter, RECEIVER_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(pipReceiver, filter)
+        }
+
+        updatePipParams()
 
         setContent {
             FontChangerTheme {
                 if (isInPipMode) {
                     PipContent(
-                        convertedText = FontConverter.convert(lastInputText, lastStyle),
-                        styleName = lastStyle.displayName
+                        convertedText = FontConverter.convert(lastInputText, currentStyle),
+                        styleName = currentStyle.displayName
                     )
                 } else {
                     MainScreen(
@@ -106,16 +139,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        try {
-            unregisterReceiver(copyReceiver)
-        } catch (_: Exception) {}
+        try { unregisterReceiver(pipReceiver) } catch (_: Exception) {}
     }
 
     private fun enterPipMode() {
         try {
             enterPictureInPictureMode(buildPipParams())
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to enter PiP mode", e)
+            Log.e(TAG, "Failed to enter PiP", e)
         }
     }
 
