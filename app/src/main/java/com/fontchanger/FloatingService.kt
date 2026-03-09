@@ -35,6 +35,7 @@ class FloatingService : Service() {
     private lateinit var floatingView: View
     private lateinit var layoutParams: WindowManager.LayoutParams
     private var styleIndex = 0
+    private var autoCopy = false
     private var isInputActive = false
 
     private val currentStyle: FontStyle
@@ -108,8 +109,14 @@ class FloatingService : Service() {
     private fun createFloatingWindow() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
+        // 設定値を読み込み
+        styleIndex = AppSettings.getDefaultStyleIndex(this)
+        autoCopy = AppSettings.getAutoCopy(this)
+        val windowWidth = AppSettings.getFloatingWidth(this)
+        val opacity = AppSettings.getFloatingOpacity(this)
+
         layoutParams = WindowManager.LayoutParams(
-            dp(300),
+            dp(windowWidth),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, // 初期状態: フォーカスなし
@@ -126,6 +133,7 @@ class FloatingService : Service() {
             setBackgroundColor(0xF01E1E2E.toInt())
             setPadding(dp(12), dp(8), dp(12), dp(12))
             elevation = dp(8).toFloat()
+            alpha = opacity
             // ウィンドウ外タッチで自動的にフォーカス解放
             setOnTouchListener { _, event ->
                 if (event.action == MotionEvent.ACTION_OUTSIDE) {
@@ -246,31 +254,31 @@ class FloatingService : Service() {
             styleLabel.text = currentStyle.displayName
         }
 
-        val prevBtn = createButton("◀") {
-            styleIndex = if (styleIndex > 0) styleIndex - 1 else FontStyle.entries.size - 1
-            updateResult()
-        }
-        val copyBtn = createButton("コピー") {
+        fun copyToClipboard() {
             val text = resultText.text.toString()
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("FontChanger", text))
             Toast.makeText(this, "コピーしました", Toast.LENGTH_SHORT).show()
-            // コピー後、フォーカスを解放して他アプリに戻れるようにする
             disableFocus()
+        }
+
+        val prevBtn = createButton("◀") {
+            styleIndex = if (styleIndex > 0) styleIndex - 1 else FontStyle.entries.size - 1
+            updateResult()
+            if (autoCopy) copyToClipboard()
+        }
+        val copyBtn = createButton("コピー") {
+            copyToClipboard()
         }
         val nextBtn = createButton("▶") {
             styleIndex = if (styleIndex < FontStyle.entries.size - 1) styleIndex + 1 else 0
             updateResult()
-        }
-        val doneBtn = createButton("完了") {
-            input.clearFocus()
-            disableFocus()
+            if (autoCopy) copyToClipboard()
         }
 
         buttonRow.addView(prevBtn)
         buttonRow.addView(copyBtn)
         buttonRow.addView(nextBtn)
-        buttonRow.addView(doneBtn)
         root.addView(buttonRow)
 
         // テキスト変更リスナー

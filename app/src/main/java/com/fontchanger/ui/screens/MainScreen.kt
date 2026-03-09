@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,7 +40,8 @@ import com.fontchanger.ui.components.FontResultCard
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    onStartFloating: () -> Unit
+    onStartFloating: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     var inputText by rememberSaveable { mutableStateOf("") }
     val displayText = inputText.ifEmpty { "Hello World" }
@@ -58,6 +60,12 @@ fun MainScreen(
                         Icon(
                             imageVector = Icons.Default.Layers,
                             contentDescription = "フローティング"
+                        )
+                    }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "設定"
                         )
                     }
                 },
